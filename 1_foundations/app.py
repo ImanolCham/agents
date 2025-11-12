@@ -80,9 +80,9 @@ tools = [{"type": "function", "function": record_user_details_json},
 class Me:
 
     def __init__(self):
-        api_key=os.getenv("OPEN_AI_KEY")
+        api_key=os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise RuntimeError("OPEN_AI_KEY not found in environment variables")
+            raise RuntimeError("OPENAI_API_KEY not found in environment variables")
         self.openai = OpenAI()
         self.name = "Imanol Chamorro"
         self.linkedin = ""
@@ -175,7 +175,7 @@ def evaluator_user_prompt(reply, message, history):
 
 # It creates an instance of the OpenAI API to evaluate the response. (Usually here another AI is used)
 OpenAIEvaluator = OpenAI(
-    api_key=os.getenv("OPEN_AI_KEY"), 
+    api_key=os.getenv("OPENAI_API_KEY"), 
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 

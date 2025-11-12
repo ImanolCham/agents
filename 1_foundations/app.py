@@ -12,15 +12,17 @@ import gradio as gr
 load_dotenv(override=True)
 
 # Pushover function, sends a POST to notify the user about events
-def push(text):
-    requests.post(
-        "https://api.pushover.net/1/messages.json",
-        data={
-            "token": os.getenv("PUSHOVER_TOKEN"),
-            "user": os.getenv("PUSHOVER_USER"),
-            "message": text,
-        }
-    )
+def push(text: str):
+    token = os.getenv("PUSHOVER_TOKEN")
+    user = os.getenv("PUSHOVER_USER")
+    if not token or not user:
+        return  # no-op en Spaces
+    try:
+        requests.post("https://api.pushover.net/1/messages.json",
+                      data={"token": token, "user": user, "message": text},
+                      timeout=5)
+    except Exception as e:
+        print(f"[pushover] {e}")
 
 # Tools to record user details and unknown questions. The 1st one is for registering the contact and the second one is for questiosn that can't be answered.
 def record_user_details(email, name="Name not provided", notes="not provided"):
@@ -180,10 +182,22 @@ OpenAIEvaluator = OpenAI()
 # It builds the history of the conversation with a system message, the Gradio's history and the user's message .
 # It calls the OpenAI API to get the response. If this ask for tools, it execute and repit until the model gives back a final response.
 def evaluate(reply, message, history) -> Evaluation:
+    messages = [
+        {"role": "system", "content": evaluator_system_prompt + 
+         "\n\nReply STRICTLY in valid JSON format with two keys: "
+         "`is_acceptable` (true/false) and `feedback` (string)."},
+        {"role": "user", "content": evaluator_user_prompt(reply, message, history)}
+    ]
 
-    messages = [{"role": "system", "content": evaluator_system_prompt}] + [{"role": "user", "content": evaluator_user_prompt(reply, message, history)}]
-    response = OpenAIEvaluator.beta.chat.completions.parse(model="gpt-4o-mini", messages=messages, response_format=Evaluation)
-    return response.choices[0].message.parsed
+    # Igual que el resto de llamadas
+    response = OpenAIEvaluator.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages
+    )
+
+    # El modelo devuelve texto JSON; lo convertimos a objeto Pydantic
+    data = json.loads(response.choices[0].message.content)
+    return Evaluation(**data)
 
 # Function to rerun the response. It is used to rerun the response if it is not acceptable.
 def rerun(reply, message, history, feedback):

@@ -1,3 +1,4 @@
+# Libraries
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
@@ -7,9 +8,10 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 import gradio as gr
 
-
+# Priorize .env vs the environment variables
 load_dotenv(override=True)
 
+# Pushover function, sends a POST to notify the user about events
 def push(text):
     requests.post(
         "https://api.pushover.net/1/messages.json",
@@ -20,6 +22,7 @@ def push(text):
         }
     )
 
+# Tools to record user details and unknown questions. The 1st one is for registering the contact and the second one is for questiosn that can't be answered.
 def record_user_details(email, name="Name not provided", notes="not provided"):
     push(f"Recording {name} with email {email} and notes {notes}")
     return {"recorded": "ok"}
@@ -28,6 +31,7 @@ def record_unknown_question(question):
     push(f"Recording {question}")
     return {"recorded": "ok"}
 
+# JSON representation of the tools for the OpenAI API. It defines the interface for making the model able to invoke the functions.
 record_user_details_json = {
     "name": "record_user_details",
     "description": "Use this tool to record that a user is interested in being in touch and provided an email address",
@@ -72,7 +76,7 @@ record_unknown_question_json = {
 tools = [{"type": "function", "function": record_user_details_json},
         {"type": "function", "function": record_unknown_question_json}]
 
-
+# Class to represent the AGENT, it validates if you have an API key that initializes the OpenAI API, your name and buffers for the LinkedIn profile and summary.
 class Me:
 
     def __init__(self):
@@ -84,6 +88,7 @@ class Me:
         self.linkedin = ""
         self.summary = ""
         try:
+            # it extracts the text from the LinkedIn PDF and it saves it in the self-linkedin buffer
             reader = PdfReader("me/linkedin.pdf")
             for page in reader.pages:
                 text = page.extract_text()
@@ -97,6 +102,7 @@ class Me:
         except Exception as e:
             print(f"[warn] Summary not found: {e}")
 
+    # Execution of the tools. It recives the tools petitions and it calls the Python function and gives back the rol "tool" with the result.
     def handle_tool_call(self, tool_calls):
         results = []
         for tool_call in tool_calls:
@@ -108,6 +114,7 @@ class Me:
             results.append({"role": "tool","content": json.dumps(result),"tool_call_id": tool_call.id})
         return results
     
+    # System prompt for the AGENT. It is the instructions that the AGENT will follow to answer the questions.
     def system_prompt(self):
         system_prompt = f"You are acting as {self.name}. You are answering questions on {self.name}'s website, \
 particularly questions related to {self.name}'s career, background, skills and experience. \
@@ -121,6 +128,9 @@ If the user is engaging in discussion, try to steer them towards getting in touc
         system_prompt += f"With this context, please chat with the user, always staying in character as {self.name}."
         return system_prompt
     
+    # Chat function. It is the link between the user and the AGENT.
+    # It builds the history of the conversation with a system message, the Gradio's history and the user's message .
+    # It calls the OpenAI API to get the response. If this ask for tools, it execute and repit until the model gives back a final response.
     def chat(self, message, history):
         messages = [{"role": "system", "content": self.system_prompt()}] + history + [{"role": "user", "content": message}]
         done = False
@@ -136,14 +146,16 @@ If the user is engaging in discussion, try to steer them towards getting in touc
                 done = True
         return response.choices[0].message.content
 
+# It creates an instance of the AGENT. Ready to be used and it saves the prompt in the base_system_prompt variable.
 me = Me()
 base_system_prompt = me.system_prompt()
 
-
+# Class to represent the evalutaion of the response. It is used to evaluate if the response is acceptable or not.
 class Evaluation(BaseModel):
     is_acceptable: bool
     feedback: str
 
+# System prompt for the evaluator. It is the instructions that the evaluator will follow to evaluate the response.
 evaluator_system_prompt = f"You are an evaluator that decides whether a response to a question is acceptable. \
 You are provided with a conversation between a User and an Agent. Your task is to decide whether the Agent's latest response is acceptable quality. \
 The Agent is playing the role of {me.name} and is representing {me.name} on their website. \
@@ -153,6 +165,7 @@ The Agent has been provided with context on {me.name} in the form of their summa
 evaluator_system_prompt += f"\n\n## Summary:\n{me.summary}\n\n## LinkedIn Profile:\n{me.linkedin}\n\n"
 evaluator_system_prompt += f"With this context, please evaluate the latest response, replying with whether the response is acceptable and your feedback."
 
+# User prompt for the evaluator. It is the instructions that the evaluator will follow to evaluate the response.
 def evaluator_user_prompt(reply, message, history):
     user_prompt = f"Here's the conversation between the User and the Agent: \n\n{history}\n\n"
     user_prompt += f"Here's the latest message from the User: \n\n{message}\n\n"
@@ -160,17 +173,22 @@ def evaluator_user_prompt(reply, message, history):
     user_prompt += "Please evaluate the response, replying with whether it is acceptable and your feedback."
     return user_prompt
 
+# It creates an instance of the OpenAI API to evaluate the response. (Usually here another AI is used)
 OpenAIEvaluator = OpenAI(
     api_key=os.getenv("OPEN_AI_KEY"), 
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
+# Function to evaluate the response. It is the link between the user and the evaluator.
+# It builds the history of the conversation with a system message, the Gradio's history and the user's message .
+# It calls the OpenAI API to get the response. If this ask for tools, it execute and repit until the model gives back a final response.
 def evaluate(reply, message, history) -> Evaluation:
 
     messages = [{"role": "system", "content": evaluator_system_prompt}] + [{"role": "user", "content": evaluator_user_prompt(reply, message, history)}]
     response = OpenAIEvaluator.beta.chat.completions.parse(model="gpt-4o-mini", messages=messages, response_format=Evaluation)
     return response.choices[0].message.parsed
 
+# Function to rerun the response. It is used to rerun the response if it is not acceptable.
 def rerun(reply, message, history, feedback):
     updated_system_prompt = base_system_prompt + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
     updated_system_prompt += f"## Your attempted answer:\n{reply}\n\n"
@@ -179,6 +197,7 @@ def rerun(reply, message, history, feedback):
     response = me.openai.chat.completions.create(model="gpt-4o-mini", messages=messages)
     return response.choices[0].message.content
 
+# Function to chat with the AGENT. It is the link between the user and the AGENT.
 def chat(message, history):
     if "patent" in message:
         system = base_system_prompt + "\n\nEverything in your reply needs to be in pig latin - \
@@ -199,6 +218,7 @@ def chat(message, history):
         reply = rerun(reply, message, history, evaluation.feedback)       
     return reply
 
+# Main function to launch the Gradio interface.
 if __name__ == "__main__":
-    gr.ChatInterface(me.chat, type="messages").launch()
+    gr.ChatInterface(chat, type="messages").launch()
     

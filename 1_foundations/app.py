@@ -3,6 +3,7 @@ from openai import OpenAI
 import json
 import os
 import requests
+from pydantic import BaseModel
 from pypdf import PdfReader
 import gradio as gr
 
@@ -18,7 +19,6 @@ def push(text):
             "message": text,
         }
     )
-
 
 def record_user_details(email, name="Name not provided", notes="not provided"):
     push(f"Recording {name} with email {email} and notes {notes}")
@@ -76,17 +76,26 @@ tools = [{"type": "function", "function": record_user_details_json},
 class Me:
 
     def __init__(self):
+        api_key=os.getenv("OPEN_AI_KEY")
+        if not api_key:
+            raise RuntimeError("OPEN_AI_KEY not found in environment variables")
         self.openai = OpenAI()
-        self.name = "Ed Donner"
-        reader = PdfReader("me/linkedin.pdf")
+        self.name = "Imanol Chamorro"
         self.linkedin = ""
-        for page in reader.pages:
-            text = page.extract_text()
-            if text:
-                self.linkedin += text
-        with open("me/summary.txt", "r", encoding="utf-8") as f:
-            self.summary = f.read()
+        self.summary = ""
+        try:
+            reader = PdfReader("me/linkedin.pdf")
+            for page in reader.pages:
+                text = page.extract_text()
+                self.linkedin += text + "\n"
+        except Exception as e:
+            print(f"Error reading LinkedIn PDF: {e}")
 
+        try:
+            with open("me/summary.txt", "r", encoding="utf-8") as f:
+                self.summary = f.read()
+        except Exception as e:
+            print(f"[warn] Summary not found: {e}")
 
     def handle_tool_call(self, tool_calls):
         results = []
@@ -126,9 +135,70 @@ If the user is engaging in discussion, try to steer them towards getting in touc
             else:
                 done = True
         return response.choices[0].message.content
-    
+
+me = Me()
+base_system_prompt = me.system_prompt()
+
+
+class Evaluation(BaseModel):
+    is_acceptable: bool
+    feedback: str
+
+evaluator_system_prompt = f"You are an evaluator that decides whether a response to a question is acceptable. \
+You are provided with a conversation between a User and an Agent. Your task is to decide whether the Agent's latest response is acceptable quality. \
+The Agent is playing the role of {me.name} and is representing {me.name} on their website. \
+The Agent has been instructed to be professional and engaging, as if talking to a potential client or future employer who came across the website. \
+The Agent has been provided with context on {me.name} in the form of their summary and LinkedIn details. Here's the information:"
+
+evaluator_system_prompt += f"\n\n## Summary:\n{me.summary}\n\n## LinkedIn Profile:\n{me.linkedin}\n\n"
+evaluator_system_prompt += f"With this context, please evaluate the latest response, replying with whether the response is acceptable and your feedback."
+
+def evaluator_user_prompt(reply, message, history):
+    user_prompt = f"Here's the conversation between the User and the Agent: \n\n{history}\n\n"
+    user_prompt += f"Here's the latest message from the User: \n\n{message}\n\n"
+    user_prompt += f"Here's the latest response from the Agent: \n\n{reply}\n\n"
+    user_prompt += "Please evaluate the response, replying with whether it is acceptable and your feedback."
+    return user_prompt
+
+OpenAIEvaluator = OpenAI(
+    api_key=os.getenv("OPEN_AI_KEY"), 
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+def evaluate(reply, message, history) -> Evaluation:
+
+    messages = [{"role": "system", "content": evaluator_system_prompt}] + [{"role": "user", "content": evaluator_user_prompt(reply, message, history)}]
+    response = OpenAIEvaluator.beta.chat.completions.parse(model="gpt-4o-mini", messages=messages, response_format=Evaluation)
+    return response.choices[0].message.parsed
+
+def rerun(reply, message, history, feedback):
+    updated_system_prompt = base_system_prompt + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
+    updated_system_prompt += f"## Your attempted answer:\n{reply}\n\n"
+    updated_system_prompt += f"## Reason for rejection:\n{feedback}\n\n"
+    messages = [{"role": "system", "content": updated_system_prompt}] + history + [{"role": "user", "content": message}]
+    response = me.openai.chat.completions.create(model="gpt-4o-mini", messages=messages)
+    return response.choices[0].message.content
+
+def chat(message, history):
+    if "patent" in message:
+        system = base_system_prompt + "\n\nEverything in your reply needs to be in pig latin - \
+                it is mandatory that you respond only and entirely in pig latin"
+    else:
+        system = base_system_prompt
+    messages = [{"role": "system", "content": system}] + history + [{"role": "user", "content": message}]
+    response = me.openai.chat.completions.create(model="gpt-4o-mini", messages=messages)
+    reply =response.choices[0].message.content
+
+    evaluation = evaluate(reply, message, history)
+
+    if evaluation.is_acceptable:
+        print("Passed evaluation - returning reply")
+    else:
+        print("Failed evaluation - retrying")
+        print(evaluation.feedback)
+        reply = rerun(reply, message, history, evaluation.feedback)       
+    return reply
 
 if __name__ == "__main__":
-    me = Me()
     gr.ChatInterface(me.chat, type="messages").launch()
     

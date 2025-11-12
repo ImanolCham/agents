@@ -174,10 +174,7 @@ def evaluator_user_prompt(reply, message, history):
     return user_prompt
 
 # It creates an instance of the OpenAI API to evaluate the response. (Usually here another AI is used)
-OpenAIEvaluator = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"), 
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
+OpenAIEvaluator = OpenAI()
 
 # Function to evaluate the response. It is the link between the user and the evaluator.
 # It builds the history of the conversation with a system message, the Gradio's history and the user's message .

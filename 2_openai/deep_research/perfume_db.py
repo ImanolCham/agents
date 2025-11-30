@@ -1,6 +1,7 @@
 # perfume_db.py
 
 import os
+import re
 import pandas as pd
 from functools import lru_cache
 from difflib import get_close_matches
@@ -15,6 +16,16 @@ FRA_CSV_PATH = "data/fra_cleaned.csv"          # url, Perfume, Brand, Country, G
 
 
 # ---------- UTILIDADES GENERALES ----------
+
+def to_slug(text: str) -> str:
+    """Convierte 'Le Beau' -> 'le-beau', quitando cosas raras."""
+    if not isinstance(text, str):
+        return ""
+    text = text.lower()
+    # sustituimos cualquier cosa que no sea letra o número por '-'
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    text = text.strip("-")
+    return text
 
 def translate_text(text: str, target_lang: str = "es") -> str:
     """Traduce `text` al idioma indicado usando OpenAI."""
@@ -122,8 +133,16 @@ def load_fra_df() -> pd.DataFrame:
     if not os.path.exists(FRA_CSV_PATH):
         raise FileNotFoundError(f"No encuentro el CSV fra_cleaned en: {FRA_CSV_PATH}")
 
-    df = pd.read_csv(FRA_CSV_PATH, encoding="latin1")
-    # Algunas columnas pueden no estar exactamente así, ajusta si hace falta
+    df = pd.read_csv(
+        FRA_CSV_PATH,
+        encoding="latin1",    # o "cp1252" si hiciera falta
+        sep=";",              # 👈 MUY IMPORTANTE: separador por ';'
+        engine="python",
+        on_bad_lines="skip",
+    )
+
+    print("fra_cleaned columns:", list(df.columns))
+
     required = ["Perfume", "Brand"]
     for c in required:
         if c not in df.columns:
@@ -233,6 +252,18 @@ def build_info_html_fra(row) -> tuple[str, str]:
 
 def find_in_fra(name: str):
     df = load_fra_df()
+
+    # 1) Intento "inteligente" con slug: 'Le Beau' -> 'le-beau'
+    slug = to_slug(name)
+    if slug:
+        mask = df["Perfume"].astype(str).str.contains(slug, case=False, na=False)
+        if mask.any():
+            # si hay varios, te puedes quedar por ejemplo con el de mejor rating
+            candidates = df[mask]
+            # aquí simplemente cojo el primero:
+            return candidates.iloc[0]
+
+    # 2) Si no hay coincidencias por slug, usamos fuzzy matching normal
     return _fuzzy_row(df, "perfume_norm", name)
 
 

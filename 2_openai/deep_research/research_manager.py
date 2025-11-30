@@ -10,7 +10,7 @@ class ResearchManager:
     async def run(self, query: str):
         """ Run the deep research process, yielding the status updates and the final report"""
         trace_id = gen_trace_id()
-        with trace("Research trace", trace_id=trace_id):
+        with trace("Research trace", trace_id=trace_id): # The order is respected here, the await just lets the rest of the script continues
             print(f"View trace: https://platform.openai.com/traces/trace?trace_id={trace_id}")
             yield f"View trace: https://platform.openai.com/traces/trace?trace_id={trace_id}"
             print("Starting research...")
@@ -25,7 +25,7 @@ class ResearchManager:
             yield report.markdown_report
         
 
-    async def plan_searches(self, query: str) -> WebSearchPlan:
+    async def plan_searches(self, query: str) -> WebSearchPlan: # The arrow means, when this function is finish it will return a WebSearchPlan 
         """ Plan the searches to perform for the query """
         print("Planning searches...")
         result = await Runner.run(
@@ -35,7 +35,7 @@ class ResearchManager:
         print(f"Will perform {len(result.final_output.searches)} searches")
         return result.final_output_as(WebSearchPlan)
 
-    async def perform_searches(self, search_plan: WebSearchPlan) -> list[str]:
+    async def perform_searches(self, search_plan: WebSearchPlan) -> list[str]: # When the function is finish it will return a list of strings
         """ Perform the searches to perform for the query """
         print("Searching...")
         num_completed = 0
@@ -62,7 +62,7 @@ class ResearchManager:
         except Exception:
             return None
 
-    async def write_report(self, query: str, search_results: list[str]) -> ReportData:
+    async def write_report(self, query: str, search_results: list[str]) -> ReportData: # This will return the ReportData
         """ Write the report for the query """
         print("Thinking about report...")
         input = f"Original query: {query}\nSummarized search results: {search_results}"

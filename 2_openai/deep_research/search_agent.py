@@ -6,6 +6,8 @@ INSTRUCTIONS = (
     "words. Capture the main points. Write succintly, no need to have complete sentences or good "
     "grammar. This will be consumed by someone synthesizing a report, so its vital you capture the "
     "essence and ignore any fluff. Do not include any additional commentary other than the summary itself."
+    "A website I would like you to visit and read all the information is Fragantica, it is the best webpage to find information related to the questions"
+    "It is important you compare the main attributes to the perfume that you are searching for with other similar perfumes"
 )
 
 search_agent = Agent(

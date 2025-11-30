@@ -7,19 +7,17 @@ INSTRUCTIONS = (
     "You should first come up with an outline for the report that describes the structure and "
     "flow of the report. Then, generate the report and return that as your final output.\n"
     "The final output should be in markdown format, and it should be lengthy and detailed. Aim "
-    "for 2-3 pages of content, at least 200 words."
+    "for 2-3 pages of content, at least 100 words."
     "You shall give advice and recommend products related to the question"
     "You shall make a list of the similarities between products"
+    "You shall include range of prices for the comparision"
 )
 
 
 class ReportData(BaseModel):
-    short_summary: str = Field(description="A short 2-3 sentence summary of the findings.")
+    short_summary: str = Field(description="A short 1-2 sentence summary of the findings.")
 
     markdown_report: str = Field(description="The final report")
-
-    follow_up_questions: list[str] = Field(description="Suggested topics to research further")
-
 
 writer_agent = Agent(
     name="WriterAgent",

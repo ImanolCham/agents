@@ -1,23 +1,40 @@
 # perfume_db.py
+import os
 import pandas as pd
 from functools import lru_cache
 from difflib import get_close_matches
 
 
+CSV_PATH = "data/perfumes_detailed.csv"   # <-- asegúrate de que el archivo se llama así
+                                         # y está en una carpeta "data" en la raíz del repo
+
+
 @lru_cache
 def load_perfumes() -> pd.DataFrame:
-    # Ajusta el nombre del fichero si es otro
-    df = pd.read_csv("data/perfumes_detailed.csv")
+    """Carga el CSV y deja todo listo para buscar por nombre."""
+    if not os.path.exists(CSV_PATH):
+        raise FileNotFoundError(f"No encuentro el CSV en: {CSV_PATH}")
 
-    # Normalizamos el nombre para facilitar la búsqueda
-    df["name_norm"] = df["Name"].str.lower().str.strip()
+    # Si tu CSV usa ; como separador, cambia sep=";"
+    df = pd.read_csv(CSV_PATH)
+
+    # Para depurar, imprime columnas disponibles en logs del Space
+    print("Loaded perfumes CSV with columns:", list(df.columns))
+
+    # Comprobamos que están las columnas que esperamos
+    required_cols = ["Name", "Brand", "Description", "Notes", "Image URL"]
+    for c in required_cols:
+        if c not in df.columns:
+            raise KeyError(f"La columna '{c}' no existe en el CSV. Columnas reales: {list(df.columns)}")
+
+    df["name_norm"] = df["Name"].astype(str).str.lower().str.strip()
     return df
 
 
 def find_perfume_row(name: str):
     """Devuelve la fila del perfume más parecido al proporcionado."""
     df = load_perfumes()
-    name_norm = name.lower().strip()
+    name_norm = str(name).lower().strip()
 
     all_names = df["name_norm"].tolist()
     match = get_close_matches(name_norm, all_names, n=1, cutoff=0.6)
@@ -30,26 +47,21 @@ def find_perfume_row(name: str):
 
 
 def parse_notes(raw_notes: str):
-    """
-    Convierte el string de notas en una lista limpia.
-    Ejemplo: ' Vanilla bean, musks' -> ['Vanilla bean', 'musks']
-    """
+    """Convierte el string de notas en lista."""
     if not isinstance(raw_notes, str):
         return []
-
     parts = [p.strip() for p in raw_notes.split(",") if p.strip()]
     return parts
 
 
-def build_info_html(row) -> str:
-    """Construye un bloque HTML bonito con la info del perfume."""
+def build_info_html(row) -> tuple[str, str]:
+    """Construye HTML + devuelve también la URL de imagen."""
     name = row["Name"]
     brand = row["Brand"]
-    desc = row.get("Description", "").strip()
+    desc = str(row.get("Description", "")).strip()
     notes = parse_notes(row.get("Notes", ""))
-    image_url = row.get("Image URL", "")
+    image_url = str(row.get("Image URL", "")).strip()
 
-    # Cortar descripción si es larguísima (opcional)
     max_len = 700
     if len(desc) > max_len:
         desc_short = desc[:max_len].rsplit(" ", 1)[0] + "..."
@@ -76,13 +88,7 @@ def build_info_html(row) -> str:
 
 
 def get_perfume_info(name: str):
-    """
-    Devuelve un diccionario con:
-    - name
-    - brand
-    - html (descripcion + notas)
-    - image_url
-    """
+    """Devuelve dict con name, brand, html, image_url o None."""
     row = find_perfume_row(name)
     if row is None:
         return None

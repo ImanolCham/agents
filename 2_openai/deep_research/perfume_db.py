@@ -5,7 +5,7 @@ from functools import lru_cache
 from difflib import get_close_matches
 
 
-CSV_PATH = "data/perfumes_detailed.csv"   # <-- asegúrate de que el archivo se llama así
+CSV_PATH = "data/final_perfume_data.csv"   # <-- asegúrate de que el archivo se llama así
                                          # y está en una carpeta "data" en la raíz del repo
 
 

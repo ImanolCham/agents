@@ -6,7 +6,7 @@ from perfume_picker.crew import PerfumePicker
 def run_perfume_picker(user, likes, dislikes, budget, notes):
     inputs = {
         "user": user,
-        "query": query,
+        "query": query.strip(),
         "budget": budget,
         "current_date": datetime.now().astimezone().isoformat()
     }

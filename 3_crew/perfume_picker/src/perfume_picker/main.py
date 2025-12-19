@@ -13,8 +13,9 @@ def run():
     Run the research crew.
     """
     inputs = {
-        'user': 'John Pork',
-        'current_date': str(datetime.now())
+        "user": input("Nombre de usuario: ").strip() or "User",
+        "query": input("¿Qué perfume buscas? (texto libre): ").strip(),
+        "current_date": datetime.now().astimezone().isoformat(),
     }
 
     result = PerfumePicker().crew().kickoff(inputs=inputs)

@@ -1,1 +1,52 @@
+derive_preferences_task:
+  description: >
+    The user request is: "{query}".
+    Use web search to identify the reference perfume(s) if mentioned, and infer the target profile:
+    accords, key notes, season/occasion, intensity, and any constraints (e.g., cheaper, fresher, less sweet).
+    If something is unknown, leave it null or empty. Do NOT invent notes; base them on sources found.
+    Return ONLY valid JSON matching the DerivedPreferences schema.
+  expected_output: >
+    JSON only: {"reference_perfumes":[],"target_accords":[],"target_notes":[],"avoid_notes":[],"season":null,"occasion":null,"intensity":null,"constraints":[],"rationale":"..."}
+  agent: researcher
 
+research_task:
+  description: >
+    Using the derived preferences from the previous task, find exactly 4 candidate perfumes:
+    - 2 very close matches to the target profile
+    - 2 alternatives (e.g., cheaper, safer for office, different twist) but still aligned.
+    Use web search to support claims. If price/rating/image/link is unknown, set null.
+    Return ONLY valid JSON matching TrendingPerfumeList.
+  expected_output: >
+    JSON only: {"perfumes":[{...},{...},{...},{...}]}
+  agent: researcher
+  context:
+   - derive_preferences_task
+
+analyst_task:
+  description: >
+    Analyze the research findings and create a comprehensive report on {user}.
+    Your report should:
+    - Begin with an executive summary
+    - Include all key information from the research
+    - Provide insightful analysis of trends and patterns
+    - Offer a market outlook for {user}
+    - Be formatted in a professional, easy-to-read style with clear headings
+  expected_output: >
+    A polished, professional report on {user} that presents the research findings with added analysis and insights. The report should be well-structured with an executive summary, main sections, and conclusion.
+  agent: analyst
+  context:
+    - research_task
+  output_file: output/report.md
+
+perfume_picker_task:
+  description: >
+    Pick the best perfume for {user} based on the analysis of the researcher and the analyst.
+    Your pick should be based on the analysis of the researcher and the analyst.
+    It could be nice if you can mention the best selection you made and other options that you considered but did not select.
+  expected_output: >
+    The best perfume for {user} based on the analysis of the researcher and the analyst.
+  agent: perfume_picker
+  context:
+    - research_task
+    - analyst_task
+  output_file: output/decision.md
